@@ -14,7 +14,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -31,6 +31,13 @@ android {
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // 부품 파일을 압축해서 설치파일 크기를 줄임
+            useLegacyPackaging = true
         }
     }
 
