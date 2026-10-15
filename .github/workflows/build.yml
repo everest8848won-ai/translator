@@ -1,0 +1,90 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-pc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 도구 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y espeak-ng ffmpeg
+          pip install vosk==0.3.45 "ctranslate2>=4.4,<5" "sentencepiece>=0.2"
+      - name: 모델 캐시
+        uses: actions/cache@v4
+        with:
+          path: pc/models
+          key: models-v1
+      - name: 번역·음성인식 점검
+        working-directory: pc
+        run: python test_pipeline.py
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: APK 만들기
+        run: gradle -p android assembleRelease --no-daemon
+      - name: 이름 정리
+        run: cp android/app/build/outputs/apk/release/app-release.apk translator.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: translator.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 라이브러리 설치
+        run: |
+          pip install -r pc/requirements.txt
+          pip install pyinstaller
+      - name: EXE 만들기
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name Translator
+          --collect-all vosk --collect-all ctranslate2 --collect-all sentencepiece
+          --collect-all _sounddevice_data
+          pc/translator_app.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exe
+          path: dist/Translator.exe
+
+  release:
+    needs: [test-pc, android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: 다운로드 페이지에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest out/apk/translator.apk out/exe/Translator.exe \
+            --title "번역기 최신판" \
+            --notes "폰: translator.apk 설치 / 컴퓨터: Translator.exe 실행"
