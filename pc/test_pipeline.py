@@ -21,6 +21,14 @@ def check_script(lang, text):
     return has(text, ord("a"), ord("z"))
 
 
+RESULTS = []
+
+
+def log(line):
+    print(line, flush=True)
+    RESULTS.append(line)
+
+
 def main():
     report = lambda m: print(m, flush=True)
     failed = False
@@ -39,7 +47,7 @@ def main():
                 continue
             out = tr.translate(text, app.LANGS[src][0], app.LANGS[tgt][0])
             ok = check_script(tgt, out) and len(out) > 3
-            print(f"[{'OK' if ok else 'FAIL'}] {src}->{tgt}: {out}", flush=True)
+            log(f"[{'OK' if ok else 'FAIL'}] {src}->{tgt}: {out}")
             failed |= not ok
 
     # 2) 음성 인식 점검 (espeak-ng로 만든 영어 음성)
@@ -50,7 +58,7 @@ def main():
     import vosk
     for lang in app.LANG_NAMES:
         model = app.load_vosk(app.ensure_vosk_model(app.LANGS[lang][1], report))
-        print(f"[OK] {lang} 음성 모델 불러오기", flush=True)
+        log(f"[OK] {lang} 음성 모델 불러오기")
         if lang == "영어":
             rec = vosk.KaldiRecognizer(model, 16000)
             with wave.open("/tmp/test.wav") as w:
@@ -61,11 +69,13 @@ def main():
                     rec.AcceptWaveform(data)
             heard = json.loads(rec.FinalResult()).get("text", "")
             ok = "weather" in heard or "today" in heard
-            print(f"[{'OK' if ok else 'FAIL'}] 영어 음성 인식: {heard}", flush=True)
+            log(f"[{'OK' if ok else 'FAIL'}] 영어 음성 인식: {heard}")
             failed |= not ok
             if heard:
-                print("    → 한국어:", tr.translate(heard, "eng_Latn", "kor_Hang"), flush=True)
+                log("    → 한국어: " + tr.translate(heard, "eng_Latn", "kor_Hang"))
 
+    # 결과를 GitHub 화면 알림으로도 남김
+    print("::notice title=test-results::" + "%0A".join(RESULTS), flush=True)
     sys.exit(1 if failed else 0)
 
 
